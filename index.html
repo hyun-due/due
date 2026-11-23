@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#16182E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>같이보기</title>
+<style>
+  :root {
+    --bg: #12142A; --panel: #1B1E3A; --panel2: #232747; --line: rgba(255,255,255,.09);
+    --text: #EEF0FA; --muted: #9CA1C4; --dim: #7A7FA6; --amber: #FFB547; --amber-ink: #1B1400;
+    --mint: #5BD6A0; --bad: #FF7A7A;
+    --safe-t: env(safe-area-inset-top, 0px); --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 15px/1.5 "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; }
+  body { overflow: hidden; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  input, textarea { font: inherit; font-size: 16px; color: var(--text); }
+  button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  /* ---------- 로비 ---------- */
+  #lobby { height: 100%; overflow-y: auto; padding: calc(28px + var(--safe-t)) 20px calc(28px + var(--safe-b)); }
+  .lob { max-width: 420px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .brand svg { width: 52px; height: 52px; flex-shrink: 0; }
+  .brand h1 { margin: 0; font-size: 24px; letter-spacing: -.5px; }
+  .brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .lab { font-size: 13px; color: var(--muted); margin: 6px 0 -4px; }
+  .field { width: 100%; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); padding: 13px 14px; }
+  .field::placeholder, textarea::placeholder { color: var(--dim); }
+  .btn { border: 0; border-radius: 12px; padding: 14px; font-weight: 800; font-size: 16px; }
+  .btn.primary { background: var(--amber); color: var(--amber-ink); }
+  .btn.ghost { background: var(--panel2); }
+  .or { text-align: center; color: var(--dim); font-size: 13px; margin: 6px 0 -2px; }
+  .row { display: flex; gap: 8px; }
+  .row .field { flex: 1; min-width: 0; }
+  .code-in { font: 800 20px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 4px; text-transform: uppercase; text-align: center; }
+  .err { color: var(--bad); font-size: 13px; min-height: 18px; }
+  .note { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; color: var(--muted); font-size: 13px; }
+  .note b { color: var(--text); }
+
+  /* ---------- 방 ---------- */
+  #room { height: 100%; display: flex; flex-direction: column; }
+  .bar { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: calc(8px + var(--safe-t)) 10px 8px; background: var(--panel); border-bottom: 1px solid var(--line); position: relative; z-index: 5; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex-shrink: 0; margin-left: 2px; }
+  .dot.ok { background: var(--mint); } .dot.wait { background: var(--amber); } .dot.bad { background: var(--bad); }
+  .chip { border: 0; border-radius: 999px; background: var(--panel2); padding: 6px 11px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .chip.code { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 1.5px; }
+  .chip.on { background: rgba(255,181,71,.2); color: #FFD08A; }
+  .sp { flex: 1; }
+  .iconbtn { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; padding: 6px 8px; border-radius: 8px; }
+  .sheet { position: absolute; left: 8px; right: 8px; top: calc(100% + 6px); background: #1E2140; border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(0,0,0,.55); padding: 12px; display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; }
+  .sheet h3 { margin: 0; font-size: 12px; color: var(--dim); }
+  .person { display: flex; align-items: center; gap: 8px; padding: 6px 4px; font-weight: 700; }
+  .person .d { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); }
+  .person .act { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--muted); }
+  .person.me { color: #FFD08A; }
+  .sheet .btns { display: flex; gap: 8px; }
+  .sheet .btns button { flex: 1; border: 0; border-radius: 10px; padding: 11px; background: var(--panel2); font-weight: 700; font-size: 14px; }
+  .sheet .btns .danger { color: var(--bad); }
+
+  .main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .stage { flex-shrink: 0; background: #000; position: relative; }
+  .ytwrap { position: relative; width: 100%; aspect-ratio: 16 / 9; max-height: 42vh; margin: 0 auto; }
+  .ytwrap > div, .ytwrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .tapstart { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    background: rgba(0,0,0,.6); border: 0; color: #fff; font-weight: 800; font-size: 16px; z-index: 2; }
+  .tapstart span { font-size: 13px; font-weight: 500; color: #ccc; }
+
+  .helper { background: linear-gradient(160deg, #1E2244, #15172F); padding: 14px 16px 16px; }
+  .helper .svc { font-size: 12px; color: var(--muted); font-weight: 700; display: flex; gap: 8px; align-items: center; }
+  .helper .ttl { font-size: 15px; font-weight: 800; margin: 2px 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .clockrow { display: flex; align-items: baseline; gap: 10px; }
+  .clock { font: 800 40px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: 1px; }
+  .clockst { font-size: 13px; color: var(--muted); }
+  .clockst b { color: var(--text); }
+  .hbtns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .hbtns button { border: 0; border-radius: 12px; padding: 12px 6px; background: var(--panel2); font-weight: 800; font-size: 14px; }
+  .hbtns .go { background: var(--amber); color: var(--amber-ink); }
+  .hbtns .wide { grid-column: span 3; }
+  .openapp { display: inline-block; margin-left: auto; color: var(--amber); font-weight: 700; text-decoration: none; font-size: 13px; }
+  .empty { padding: 18px 16px; background: var(--panel); text-align: center; color: var(--muted); font-size: 14px; }
+
+  .tools { flex-shrink: 0; display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+  .tools .field { padding: 9px 12px; border-radius: 10px; font-size: 16px; }
+  .tools .btn { padding: 9px 14px; font-size: 14px; border-radius: 10px; }
+  .pl { flex-shrink: 0; display: flex; gap: 8px; overflow-x: auto; padding: 8px 10px; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+  .pl::-webkit-scrollbar { display: none; }
+  .plit { flex-shrink: 0; width: 132px; border: 0; padding: 0; background: transparent; text-align: left; }
+  .plit img { width: 132px; height: 74px; object-fit: cover; border-radius: 8px; background: #000; display: block; }
+  .plit div { font-size: 11px; line-height: 1.3; margin-top: 4px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .plit.now img { outline: 2px solid var(--amber); }
+
+  .chat { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; overscroll-behavior: contain; }
+  .msg { max-width: 82%; align-self: flex-start; }
+  .msg .n { font-size: 12px; color: var(--muted); margin: 0 0 2px 4px; }
+  .msg .b { background: var(--panel2); padding: 8px 12px; border-radius: 16px 16px 16px 5px; word-break: break-word; white-space: pre-wrap; }
+  .msg .t { font-size: 10px; color: var(--dim); margin: 2px 0 0 6px; }
+  .msg.mine { align-self: flex-end; text-align: right; }
+  .msg.mine .b { background: var(--amber); color: var(--amber-ink); border-radius: 16px 16px 5px 16px; text-align: left; }
+  .msg.grp { margin-bottom: -4px; }
+  .sys { align-self: center; text-align: center; font-size: 12px; color: var(--muted); padding: 0 12px; }
+  .composer { flex-shrink: 0; display: flex; gap: 8px; padding: 8px 10px calc(8px + var(--safe-b)); border-top: 1px solid var(--line); background: var(--panel); }
+  .composer textarea { flex: 1; resize: none; height: 44px; max-height: 120px; border-radius: 22px; border: 1px solid var(--line); background: var(--bg); padding: 10px 16px; }
+  .composer button { border: 0; border-radius: 22px; padding: 0 18px; background: var(--amber); color: var(--amber-ink); font-weight: 800; }
+
+  .toast { position: fixed; left: 50%; top: calc(60px + var(--safe-t)); transform: translateX(-50%); background: rgba(20,22,44,.95); border: 1px solid var(--line);
+    padding: 10px 16px; border-radius: 12px; font-weight: 700; font-size: 14px; z-index: 50; max-width: calc(100% - 32px); text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5); transition: opacity .2s; }
+  .count { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(10,10,22,.86); }
+  .count .num { font: 900 120px/1 ui-monospace, Menlo, Consolas, monospace; color: var(--amber); }
+  .count .cap { margin-top: 10px; font-weight: 700; color: var(--muted); }
+
+  /* 가로 화면: 영상 왼쪽, 채팅 오른쪽 */
+  @media (orientation: landscape) and (min-width: 640px) {
+    .main { flex-direction: row; }
+    .left { flex: 1.6; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
+    .right { flex: 1; min-width: 260px; display: flex; flex-direction: column; border-left: 1px solid var(--line); }
+    .ytwrap { max-height: none; }
+  }
+  @media not ((orientation: landscape) and (min-width: 640px)) {
+    .left, .right { display: contents; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= 로비 ================= -->
+<section id="lobby">
+  <div class="lob">
+    <div class="brand">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <rect x="3" y="3" width="94" height="94" rx="22" fill="#FFB547"/>
+        <circle cx="38" cy="50" r="24" fill="#16182E" fill-opacity=".92"/>
+        <circle cx="62" cy="50" r="24" fill="#16182E" fill-opacity=".6"/>
+        <path d="M45 39 L45 61 L62 50 Z" fill="#FFB547"/>
+      </svg>
+      <div><h1>같이보기</h1><p>따로 있어도 같은 장면에서</p></div>
+    </div>
+    <label class="lab" for="name">내 이름</label>
+    <input id="name" class="field" maxlength="20" placeholder="채팅에 보일 이름" autocomplete="nickname">
+    <button id="create" class="btn primary">방 만들기</button>
+    <p class="or">또는 받은 코드로 참여</p>
+    <div class="row">
+      <input id="code" class="field code-in" maxlength="6" placeholder="코드 6자리" autocomplete="off" autocapitalize="characters">
+      <button id="join" class="btn ghost">참여</button>
+    </div>
+    <div id="lobErr" class="err" role="alert"></div>
+    <div class="note">
+      <b>컴퓨터에서 확장 프로그램을 쓰는 친구와 같은 방</b>에 들어갈 수 있어요.<br>
+      · 유튜브: 이 화면에서 바로 같이 재생돼요<br>
+      · 넷플릭스·티빙 등: 앱으로 보면서 이 화면에서 채팅하고 시간을 맞춰요
+    </div>
+  </div>
+</section>
+
+<!-- ================= 방 ================= -->
+<section id="room" hidden>
+  <header class="bar">
+    <span id="dot" class="dot"></span>
+    <button id="peopleBtn" class="chip" aria-expanded="false">👥 1 ▾</button>
+    <button id="codeChip" class="chip code" title="링크 공유"></button>
+    <span class="sp"></span>
+    <button id="ytToggle" class="iconbtn">🔗 유튜브</button>
+    <div id="sheet" class="sheet" hidden>
+      <h3>참여자</h3>
+      <div id="people"></div>
+      <h3>방 코드</h3>
+      <div class="btns"><button id="shareBtn">🔗 초대 링크 보내기</button></div>
+      <div class="btns"><button id="renameBtn">이름 바꾸기</button><button id="leaveBtn" class="danger">방에서 나가기</button></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <div class="left">
+      <div class="stage" id="stage">
+        <div id="ytWrap" class="ytwrap" hidden>
+          <div id="yt"></div>
+          <button id="tapStart" class="tapstart" hidden>▶ 눌러서 같이 보기<span>휴대폰은 처음 한 번 직접 눌러야 재생돼요</span></button>
+        </div>
+        <div id="helper" class="helper" hidden>
+          <div class="svc"><span id="hSvc"></span><a id="hOpen" class="openapp" target="_blank" rel="noopener">앱에서 열기 ↗</a></div>
+          <div id="hTitle" class="ttl"></div>
+          <div class="clockrow"><span id="hClock" class="clock">0:00</span><span id="hState" class="clockst"></span></div>
+          <div class="hbtns">
+            <button id="hBack">⏪ 10초</button>
+            <button id="hToggle">⏸ 모두 멈춤</button>
+            <button id="hFwd">10초 ⏩</button>
+            <button id="hCount" class="go wide">⏱ 3초 뒤에 다 같이 재생</button>
+          </div>
+        </div>
+        <div id="empty" class="empty">아직 아무도 영상을 틀지 않았어요.<br>컴퓨터에서 영상을 틀거나, 위의 <b>🔗 유튜브</b>로 링크를 넣어 주세요.</div>
+      </div>
+      <div id="tools" class="tools" hidden>
+        <input id="ytUrl" class="field" placeholder="유튜브 링크 붙여넣기" autocomplete="off" inputmode="url">
+        <button id="ytGo" class="btn primary">같이 보기</button>
+      </div>
+      <div id="pl" class="pl" hidden></div>
+    </div>
+    <div class="right">
+      <div id="chat" class="chat" aria-live="polite"></div>
+      <form id="composer" class="composer">
+        <textarea id="msg" rows="1" maxlength="300" placeholder="메시지 입력" enterkeyhint="send"></textarea>
+        <button type="submit">전송</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+<div id="count" class="count" hidden><div id="countNum" class="num">3</div><div class="cap">0이 되면 재생을 누르세요</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+(() => {
+'use strict';
+// =====================================================================
+// 연결 (확장 프로그램과 같은 방식/같은 신호를 써서 같은 방에 들어갈 수 있음)
+// =====================================================================
+const NET = (() => {
+  const PREFIX = 'ottsync-v1-', MAX_MEMBERS = 8, PING_MS = 4000, DEAD_MS = 15000, RETRY_MS = 3000, RETRY_FOR_MS = 5 * 60 * 1000;
+  let peer = null, role = null, code = null, state = 'idle', myName = '익명';
+  const guests = new Map(), dropped = new Map();
+  let hostConn = null, hostName = null, hostSeen = 0, roster = [];
+  let retryTimer = null, retryUntil = 0, everJoined = false, roomFull = false, leaving = false, joinFinish = null;
+  const chatLog = [], pending = [];
+  let playlist = null;
+  const api = { onData: () => {}, onStatus: () => {} };
+  const keepPl = (d) => { playlist = { items: d.items || [], cur: d.cur, auto: d.auto }; };
+  const pushLog = (e) => { chatLog.push(e); if (chatLog.length > 200) chatLog.shift(); };
+  const toApp = (d) => { try { api.onData(d); } catch (e) { console.error(e); } };
+  function members() {
+    if (role === 'host') return [...guests.values()].filter((g) => g.hello).map((g) => ({ name: g.name, host: false }));
+    const myId = peer && peer.id;
+    return roster.filter((m) => m.id !== myId).map((m) => ({ name: m.name, host: !!m.host }));
+  }
+  const statusObj = () => ({ state, role, code, myName, members: members(), max: MAX_MEMBERS });
+  const report = () => { try { api.onStatus(statusObj()); } catch (e) { console.error(e); } };
+  function sysMsg(text, broadcast, exceptId) {
+    const entry = { sys: true, text, ts: Date.now() };
+    pushLog(entry); toApp({ type: '_sys', text, ts: entry.ts });
+    if (broadcast && role === 'host') sendGuests({ type: '_sys', text, ts: entry.ts }, exceptId);
+  }
+  function genCode() { const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 6; i++) s += c[Math.floor(Math.random() * c.length)]; return s; }
+  function safeSend(c, d) { if (c && c.open) { try { c.send(d); return true; } catch (e) {} } return false; }
+  function sendGuests(d, exceptId) { let n = 0; for (const [id, g] of guests) if (id !== exceptId && g.hello && safeSend(g.conn, d)) n++; return n; }
+  function broadcastRoster() {
+    const list = [{ id: peer && peer.id, name: myName, host: true }];
+    for (const [id, g] of guests) if (g.hello) list.push({ id, name: g.name, host: false });
+    sendGuests({ type: '_roster', members: list });
+  }
+  function handleData(d) {
+    if (d.type === 'pl_set') keepPl(d);
+    if (d.label && ['play', 'pause', 'seek', 'nav', 'presence', 'ad', 'countdown'].includes(d.type)) pushLog({ sys: true, text: String(d.label).slice(0, 200), ts: Date.now() });
+    if (d.type === 'chat') pushLog({ name: String(d.name || '').slice(0, 20), text: String(d.text || '').slice(0, 300), ts: d.ts || Date.now() });
+    toApp(d);
+  }
+  // ---- 방장 ----
+  function onGuestConnection(c) {
+    const id = c.peer;
+    c.on('open', () => {
+      const n = [...guests.values()].filter((g) => g.hello && g.conn !== c).length;
+      if (n + 1 >= MAX_MEMBERS && !(guests.get(id) && guests.get(id).hello)) { safeSend(c, { type: '_full', max: MAX_MEMBERS }); setTimeout(() => { try { c.close(); } catch (e) {} }, 500); return; }
+      const prev = guests.get(id);
+      if (prev && prev.conn !== c) { try { prev.conn.close(); } catch (e) {} }
+      guests.set(id, { conn: c, name: prev ? prev.name : '', lastSeen: Date.now(), hello: prev ? prev.hello : false, returning: !!prev });
+      safeSend(c, { type: '_hello', name: myName, host: true });
+      if (playlist) safeSend(c, { type: 'pl_set', ...playlist, nav: false });
+      safeSend(c, { type: '_history', log: chatLog.slice(-60) });
+    });
+    c.on('data', (d) => {
+      const g = guests.get(id);
+      if (!g || g.conn !== c) return;
+      g.lastSeen = Date.now();
+      if (!d || typeof d !== 'object' || d.type === '_ping') return;
+      if (d.type === '_hello') {
+        const name = String(d.name || '익명').slice(0, 20), was = g.hello, old = g.name;
+        g.name = name; g.hello = true;
+        const back = (g.returning && old === name) || dropped.get(id) === name;
+        dropped.delete(id);
+        if (!was) sysMsg(back ? '🔗 ' + name + '님이 다시 연결됐어요' : name + '님이 들어왔어요', true, id);
+        else if (old !== name) sysMsg(old + '님이 이름을 ' + name + '(으)로 바꿨어요', true);
+        g.returning = false; state = 'connected';
+        broadcastRoster(); report();
+        if (!was) toApp({ type: '_joined', name });
+        return;
+      }
+      if (d.type === '_bye') { dropGuest(id, 'left'); return; }
+      if (!g.hello) return;
+      handleData(d);
+      sendGuests(d, id);
+    });
+    c.on('close', () => { const g = guests.get(id); if (g && g.conn === c) dropGuest(id, 'closed'); });
+    c.on('error', () => { const g = guests.get(id); if (g && g.conn === c) dropGuest(id, 'error'); });
+  }
+  function dropGuest(id, reason) {
+    const g = guests.get(id); if (!g) return;
+    guests.delete(id);
+    try { g.conn.close(); } catch (e) {}
+    if (g.hello) {
+      if (reason !== 'left') dropped.set(id, g.name);
+      sysMsg(reason === 'left' ? g.name + '님이 나갔어요' : '⚠ ' + g.name + '님과 연결이 끊겼어요 (다시 연결을 기다리는 중)', true);
+      broadcastRoster();
+    }
+    if (![...guests.values()].some((x) => x.hello)) state = 'waiting';
+    report();
+  }
+  function create(name) {
+    return new Promise((resolve) => {
+      let done = false, tries = 0;
+      const finish = (r) => { if (!done) { done = true; resolve(r); } };
+      myName = name || '익명'; role = 'host'; state = 'connecting'; leaving = false;
+      const open = () => {
+        code = genCode();
+        if (peer) { try { peer.destroy(); } catch (e) {} }
+        peer = new Peer(PREFIX + code, { debug: 0 });
+        peer.on('open', () => {
+          state = 'waiting';
+          sysMsg('방을 만들었어요. 코드 ' + code + '를 친구들에게 보내 주세요 (최대 ' + MAX_MEMBERS + '명)');
+          report(); finish({ ok: true, code });
+        });
+        peer.on('connection', onGuestConnection);
+        peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) {} });
+        peer.on('error', (e) => {
+          if (done) return;
+          if (e.type === 'unavailable-id' && tries++ < 3) { open(); return; }
+          state = 'error'; report();
+          finish({ ok: false, error: '연결 서버에 접속하지 못했어요 (' + e.type + ')' });
+        });
+      };
+      open();
+      setTimeout(() => finish({ ok: false, error: '연결 서버 응답이 없어요. 인터넷 연결을 확인해 주세요.' }), 15000);
+    });
+  }
+  // ---- 참여자 ----
+  function setupHostConn(c) {
+    if (hostConn && hostConn !== c) { try { hostConn.close(); } catch (e) {} }
+    hostConn = c;
+    c.on('open', () => {
+      if (hostConn !== c) return;
+      hostSeen = Date.now(); stopRetry();
+      c.send({ type: '_hello', name: myName });
+      while (pending.length && c.open) safeSend(c, pending.shift());
+      state = 'connected'; report();
+    });
+    c.on('data', (d) => {
+      if (hostConn !== c) return;
+      hostSeen = Date.now();
+      if (!d || typeof d !== 'object' || d.type === '_ping') return;
+      if (d.type === '_full') {
+        roomFull = true; stopRetry(); state = 'error';
+        sysMsg('방이 꽉 찼어요 (최대 ' + (d.max || MAX_MEMBERS) + '명)'); report();
+        if (joinFinish) { joinFinish({ ok: false, error: '방이 꽉 찼어요 (최대 ' + (d.max || MAX_MEMBERS) + '명)' }); joinFinish = null; }
+        return;
+      }
+      if (d.type === '_hello') {
+        const name = String(d.name || '익명').slice(0, 20);
+        if (!everJoined) sysMsg('🎉 ' + name + '님의 방에 들어왔어요');
+        else if (!hostName) sysMsg('🔗 다시 연결됐어요');
+        everJoined = true; hostName = name; report();
+        if (joinFinish) { joinFinish({ ok: true, code }); joinFinish = null; }
+        return;
+      }
+      if (d.type === '_roster') { roster = Array.isArray(d.members) ? d.members : []; report(); return; }
+      if (d.type === '_history') {
+        if (Array.isArray(d.log) && chatLog.length <= 2) {
+          const mine = chatLog.slice(); chatLog.length = 0;
+          for (const e of d.log) { if (e.sys && /^방을 (만들|다시)/.test(e.text || '')) continue; chatLog.push(e.sys ? e : { ...e, mine: e.name === myName && !!e.name }); }
+          for (const e of mine) chatLog.push(e);
+          toApp({ type: '_reloadHistory' });
+        }
+        return;
+      }
+      if (d.type === '_sys') { pushLog({ sys: true, text: String(d.text || '').slice(0, 200), ts: d.ts || Date.now() }); toApp({ type: '_sys', text: d.text, ts: d.ts }); return; }
+      if (d.type === '_bye') { hostConn = null; stopRetry(); state = 'disconnected'; sysMsg('방장 ' + (hostName || '') + '님이 방을 닫았어요'); roster = []; report(); return; }
+      handleData(d);
+    });
+    c.on('close', () => { if (hostConn === c) dropHost(); });
+    c.on('error', () => { if (hostConn === c) dropHost(); });
+  }
+  function dropHost() {
+    const c = hostConn; hostConn = null;
+    if (c) { try { c.close(); } catch (e) {} }
+    if (roomFull || leaving) return;
+    hostName = null; roster = [];
+    sysMsg('⚠ 연결이 끊겼어요. 다시 연결하는 중…');
+    startRetry();
+  }
+  function stopRetry() { clearTimeout(retryTimer); retryTimer = null; retryUntil = 0; }
+  function startRetry(fast) {
+    state = 'reconnecting'; report();
+    if (!retryUntil) retryUntil = Date.now() + RETRY_FOR_MS;
+    clearTimeout(retryTimer);
+    const attempt = () => {
+      if (state !== 'reconnecting') return;
+      if (Date.now() > retryUntil) { stopRetry(); state = 'disconnected'; sysMsg('⚠ 다시 연결하지 못했어요. 방장이 방에 남아 있는지 확인하고, 나가기 후 다시 참여해 주세요'); report(); return; }
+      try {
+        if (!peer || peer.destroyed) { peer = new Peer({ debug: 0 }); wireGuestPeer(); }
+        else if (peer.disconnected) peer.reconnect();
+        else setupHostConn(peer.connect(PREFIX + code, { reliable: true }));
+      } catch (e) {}
+      retryTimer = setTimeout(attempt, RETRY_MS);
+    };
+    retryTimer = setTimeout(attempt, fast ? 50 : 500);
+  }
+  function wireGuestPeer() {
+    peer.on('open', () => { if (state === 'reconnecting' || state === 'connecting') setupHostConn(peer.connect(PREFIX + code, { reliable: true })); });
+    peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) {} });
+    peer.on('error', (e) => {
+      if (state === 'connecting' && joinFinish && e.type === 'peer-unavailable') {
+        state = 'error'; report();
+        joinFinish({ ok: false, error: '그 코드로 열린 방이 없어요. 코드를 다시 확인해 주세요.' }); joinFinish = null;
+      }
+    });
+  }
+  function join(joinCode, name) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (r) => { if (!done) { done = true; resolve(r); } };
+      myName = name || '익명'; role = 'guest'; code = joinCode; roomFull = false; leaving = false; everJoined = false;
+      peer = new Peer({ debug: 0 });
+      wireGuestPeer();
+      state = 'connecting'; joinFinish = finish;
+      setTimeout(() => { if (!done) { state = 'error'; report(); } finish({ ok: false, error: '연결되지 않았어요. 방 코드와 네트워크를 확인해 주세요.' }); }, 20000);
+    });
+  }
+  setInterval(() => {
+    const now = Date.now();
+    if (role === 'host') {
+      for (const [id, g] of guests) { safeSend(g.conn, { type: '_ping' }); if (now - g.lastSeen > DEAD_MS) dropGuest(id, 'timeout'); }
+    } else if (hostConn && hostConn.open) {
+      safeSend(hostConn, { type: '_ping' });
+      if (state === 'connected' && now - hostSeen > DEAD_MS) dropHost();
+    }
+  }, PING_MS);
+
+  function send(d) {
+    if (d.type === 'pl_set') keepPl(d);
+    if (d.type === 'chat') pushLog({ name: myName, text: d.text, ts: d.ts, mine: true });
+    let delivered;
+    if (role === 'host') delivered = sendGuests(d) > 0;
+    else {
+      delivered = safeSend(hostConn, d);
+      if (!delivered && (d.type === 'chat' || d.type === 'pl_set')) { pending.push(d); if (pending.length > 50) pending.shift(); }
+    }
+    if (delivered && d.label) sysMsg(String(d.label).slice(0, 200));
+    return delivered;
+  }
+  function leave() {
+    leaving = true; stopRetry();
+    if (role === 'host') sendGuests({ type: '_bye' }); else safeSend(hostConn, { type: '_bye' });
+    setTimeout(() => { try { peer && peer.destroy(); } catch (e) {} peer = null; guests.clear(); hostConn = null; roster = []; chatLog.length = 0; playlist = null; state = 'idle'; role = null; code = null; report(); }, 250);
+  }
+  function setName(n) {
+    myName = n || '익명';
+    if (role === 'host') { sendGuests({ type: '_hello', name: myName, host: true }); broadcastRoster(); }
+    else safeSend(hostConn, { type: '_hello', name: myName });
+    report();
+  }
+  // 휴대폰에서 다른 앱을 보다 돌아오면 바로 다시 연결
+  function kick() {
+    if (role === 'guest' && (state === 'reconnecting' || (state === 'connected' && Date.now() - hostSeen > 6000))) {
+      if (state === 'connected') { dropHost(); return; }
+      startRetry(true);
+    }
+    if (role === 'host' && peer && peer.disconnected && !peer.destroyed) { try { peer.reconnect(); } catch (e) {} }
+  }
+  return Object.assign(api, { create, join, send, leave, setName, kick, status: statusObj, log: () => chatLog, playlist: () => playlist, myName: () => myName });
+})();
+
+// =====================================================================
+// 화면
+// =====================================================================
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k) { try { return localStorage.getItem('ottsync.' + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem('ottsync.' + k, v); } catch (e) {} }
+};
+const DRIFT = 1.5;
+const SITE_NAME = { yt: '유튜브', nf: '넷플릭스', dp: '디즈니+', tving: '티빙', wavve: '웨이브', coupang: '쿠팡플레이', watcha: '왓챠' };
+let st = { state: 'idle' };
+let peerAct = {};
+
+const fmt = (s) => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+const fmtDelta = (s) => { s = Math.round(Math.abs(s)); const m = Math.floor(s / 60), x = s % 60; return m ? m + '분' + (x ? ' ' + x + '초' : '') : x + '초'; };
+const clock = (ts) => { const d = new Date(ts || Date.now()); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const me = () => NET.myName();
+const connected = () => st.state === 'connected';
+const vibrate = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+
+let toastTimer = null;
+function toast(t) {
+  const el = $('toast'); el.textContent = t; el.hidden = false; el.style.opacity = '1';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.style.opacity = '0'; setTimeout(() => { el.hidden = true; }, 200); }, 2600);
+}
+
+// ---------------- 로비 ----------------
+$('name').value = store.get('name') || '';
+const qRoom = new URLSearchParams(location.search).get('room');
+if (qRoom) { $('code').value = qRoom.toUpperCase().slice(0, 6); }
+const myNameInput = () => { const n = $('name').value.trim().slice(0, 20); store.set('name', n); return n || '익명'; };
+
+$('create').onclick = async () => {
+  $('lobErr').textContent = ''; $('create').disabled = true;
+  const r = await NET.create(myNameInput());
+  $('create').disabled = false;
+  if (!r.ok) { $('lobErr').textContent = r.error; return; }
+  enterRoom();
+};
+async function doJoin() {
+  const c = $('code').value.trim().toUpperCase();
+  if (c.length !== 6) { $('lobErr').textContent = '코드 6자리를 입력해 주세요'; return; }
+  $('lobErr').textContent = ''; $('join').disabled = true; $('join').textContent = '연결 중…';
+  const r = await NET.join(c, myNameInput());
+  $('join').disabled = false; $('join').textContent = '참여';
+  if (!r.ok) { $('lobErr').textContent = r.error; return; }
+  enterRoom();
+}
+$('join').onclick = doJoin;
+$('code').addEventListener('keydown', (e) => { if (e.key === 'Enter') doJoin(); });
+
+function enterRoom() {
+  $('lobby').hidden = true; $('room').hidden = false;
+  try { history.replaceState(null, '', location.pathname + '?room=' + NET.status().code); } catch (e) {}
+  renderChat(); renderTop(); renderStage();
+  keepAwake();
+}
+
+// ---------------- 상단 ----------------
+function renderTop() {
+  const s = st.state;
+  $('dot').className = 'dot' + (s === 'connected' ? ' ok' : (s === 'waiting' || s === 'connecting' || s === 'reconnecting') ? ' wait' : (s === 'disconnected' || s === 'error') ? ' bad' : '');
+  const others = st.members || [];
+  $('peopleBtn').textContent = '👥 ' + (others.length + 1) + (s === 'reconnecting' ? ' · 재연결 중' : s === 'disconnected' ? ' · 끊김' : '') + ' ▾';
+  $('codeChip').textContent = st.code || '';
+  const box = $('people'); box.textContent = '';
+  const row = (name, act, cls) => {
+    const d = document.createElement('div'); d.className = 'person ' + (cls || '');
+    const dot = document.createElement('span'); dot.className = 'd';
+    d.append(dot, name);
+    if (act) { const a = document.createElement('span'); a.className = 'act'; a.textContent = act; d.append(a); }
+    box.append(d);
+  };
+  row((st.role === 'host' ? '👑 ' : '') + me() + ' (나 · 📱)', '', 'me');
+  for (const m of others) {
+    const a = peerAct[m.name];
+    row((m.host ? '👑 ' : '') + m.name, a ? (a.label || '') : '');
+  }
+  if (!others.length) row(s === 'waiting' ? '친구 기다리는 중…' : s === 'reconnecting' ? '다시 연결하는 중…' : '연결 대기', '');
+}
+$('peopleBtn').onclick = (e) => { e.stopPropagation(); const sh = $('sheet'); sh.hidden = !sh.hidden; $('peopleBtn').setAttribute('aria-expanded', String(!sh.hidden)); };
+document.addEventListener('click', (e) => { if (!$('sheet').hidden && !$('sheet').contains(e.target) && e.target !== $('peopleBtn')) $('sheet').hidden = true; });
+async function share() {
+  const url = location.origin + location.pathname + '?room=' + (st.code || '');
+  const text = '같이보기 방 코드: ' + st.code;
+  try { if (navigator.share) { await navigator.share({ title: '같이보기', text, url }); return; } } catch (e) { return; }
+  try { await navigator.clipboard.writeText(text + '\n' + url); toast('초대 링크를 복사했어요'); } catch (e) { toast('코드: ' + st.code); }
+}
+$('codeChip').onclick = share; $('shareBtn').onclick = share;
+$('renameBtn').onclick = () => { const n = prompt('새 이름', me()); if (n != null && n.trim()) { store.set('name', n.trim().slice(0, 20)); NET.setName(n.trim().slice(0, 20)); } };
+$('leaveBtn').onclick = () => {
+  if (!confirm('방에서 나갈까요?')) return;
+  NET.leave();
+  setTimeout(() => location.replace(location.pathname), 400);
+};
+$('ytToggle').onclick = () => { $('tools').hidden = !$('tools').hidden; if (!$('tools').hidden) $('ytUrl').focus(); };
+
+// ---------------- 채팅 ----------------
+let lastGrp = null;
+function addLine(e) {
+  const list = $('chat');
+  const near = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  const el = document.createElement('div');
+  if (e.sys) { el.className = 'sys'; el.textContent = e.text; lastGrp = null; }
+  else {
+    el.className = 'msg' + (e.mine ? ' mine' : '');
+    const n = document.createElement('div'); n.className = 'n'; n.textContent = e.name || '';
+    const b = document.createElement('div'); b.className = 'b'; b.textContent = e.text;
+    const t = document.createElement('div'); t.className = 't'; t.textContent = clock(e.ts);
+    if (!e.mine) el.append(n);
+    el.append(b, t);
+    const key = (e.mine ? 'me' : 'p:' + e.name) + '|' + clock(e.ts);
+    if (lastGrp && lastGrp.key === key && lastGrp.t.isConnected) { lastGrp.t.hidden = true; lastGrp.el.classList.add('grp'); n.hidden = true; }
+    lastGrp = { key, t, el };
+  }
+  list.append(el);
+  while (list.children.length > 300) list.firstChild.remove();
+  if (near || e.mine) list.scrollTop = list.scrollHeight;
+}
+function renderChat() { $('chat').textContent = ''; lastGrp = null; for (const e of NET.log()) addLine(e); $('chat').scrollTop = $('chat').scrollHeight; }
+$('composer').onsubmit = (e) => {
+  e.preventDefault();
+  const t = $('msg').value.trim(); if (!t) return;
+  const m = { type: 'chat', name: me(), text: t.slice(0, 300), ts: Date.now() };
+  NET.send(m); addLine({ ...m, mine: true });
+  $('msg').value = ''; store.set('draft', '');
+  if (!connected()) addLine({ sys: true, text: '(친구가 연결되면 전송돼요)' });
+};
+$('msg').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && !('ontouchstart' in window)) { e.preventDefault(); $('composer').requestSubmit(); }
+});
+$('msg').addEventListener('input', () => store.set('draft', $('msg').value));
+$('msg').value = store.get('draft') || '';
+
+// =====================================================================
+// 지금 같이 보는 영상 + 기준 시간
+// =====================================================================
+// rv: 방에서 보는 영상 { vid, url, title }  /  ref: 마지막으로 알려진 재생 상태 { t, paused, at, by }
+let rv = null, ref = null, leader = false;
+const svcOf = (vid) => (vid || '').split(':')[0];
+const isYT = () => !!(rv && svcOf(rv.vid) === 'yt');
+const ytIdOf = (vid) => (vid || '').slice(3);
+const refTime = () => !ref ? 0 : ref.paused ? ref.t : ref.t + (performance.now() - ref.at) / 1000;
+function setRef(t, paused, by) { ref = { t: Number(t) || 0, paused: !!paused, at: performance.now(), by: by || (ref && ref.by) }; }
+
+function setRoomVideo(vid, url, title) {
+  if (!vid) return false;
+  const changed = !rv || rv.vid !== vid;
+  if (changed) rv = { vid, url: url || urlFor(vid), title: title || '' };
+  else { if (url) rv.url = url; if (title) rv.title = title; }
+  if (changed) { ref = null; renderStage(); }
+  else renderHelperText();
+  return changed;
+}
+function urlFor(vid) {
+  const [s, ...rest] = vid.split(':'); const r = rest.join(':');
+  if (s === 'yt') return 'https://www.youtube.com/watch?v=' + r;
+  if (s === 'nf') return 'https://www.netflix.com/watch/' + r;
+  return '';
+}
+
+function renderStage() {
+  const yt = isYT();
+  $('ytWrap').hidden = !yt;
+  $('helper').hidden = !rv || yt;
+  $('empty').hidden = !!rv;
+  if (yt) ensurePlayer(ytIdOf(rv.vid));
+  else destroyPlayer();
+  renderHelperText();
+  renderPlaylist();
+}
+function renderHelperText() {
+  if (!rv || isYT()) return;
+  const s = svcOf(rv.vid);
+  $('hSvc').textContent = '📺 ' + (SITE_NAME[s] || '영상') + ' · 앱으로 보면서 시간을 맞춰요';
+  $('hTitle').textContent = rv.title || (SITE_NAME[s] || '') + ' 영상';
+  if (rv.url) { $('hOpen').href = rv.url; $('hOpen').hidden = false; } else $('hOpen').hidden = true;
+}
+// 기준 시간 표시 (넷플릭스 등)
+setInterval(() => {
+  if (!rv || isYT() || $('room').hidden) return;
+  $('hClock').textContent = ref ? fmt(refTime()) : '--:--';
+  $('hState').innerHTML = '';
+  const b = document.createElement('b');
+  b.textContent = !ref ? '기준 시간을 기다리는 중' : ref.paused ? '⏸ 멈춤' : '▶ 재생 중';
+  $('hState').append(b);
+  if (ref && ref.by) $('hState').append(' · ' + ref.by + '님 화면 기준');
+  $('hToggle').textContent = ref && ref.paused ? '▶ 모두 재생' : '⏸ 모두 멈춤';
+}, 250);
+
+// ---------------- 다른 서비스(앱으로 보는 영상) 조작 ----------------
+function helperSend(type, t, paused, label) {
+  if (!rv) return;
+  setRef(t, paused, me());
+  NET.send(type === 'seek'
+    ? { type, time: t, paused, vid: rv.vid, label }
+    : { type, time: t, vid: rv.vid, label });
+}
+$('hToggle').onclick = () => {
+  const t = refTime();
+  if (ref && ref.paused) helperSend('play', t, false, '▶ ' + me() + '님이 재생했어요 (' + fmt(t) + ')');
+  else helperSend('pause', t, true, '⏸ ' + me() + '님이 일시정지했어요 (' + fmt(t) + ')');
+  vibrate(30);
+};
+const helperSeek = (dt) => { const from = refTime(), t = Math.max(0, from + dt);
+  helperSend('seek', t, !!(ref && ref.paused), (dt > 0 ? '⏩ ' : '⏪ ') + me() + '님이 ' + fmtDelta(dt) + ' ' + (dt > 0 ? '앞으로' : '뒤로') + ' 이동했어요 (' + fmt(from) + ' → ' + fmt(t) + ')'); };
+$('hBack').onclick = () => helperSeek(-10);
+$('hFwd').onclick = () => helperSeek(10);
+$('hCount').onclick = () => {
+  if (!rv) return;
+  const t = refTime();
+  if (!ref || !ref.paused) helperSend('pause', t, true, '⏸ ' + me() + '님이 일시정지했어요 (' + fmt(t) + ')');
+  NET.send({ type: 'chat', name: me(), text: '⏱ 3초 뒤에 같이 재생해요! (' + fmt(t) + ')', ts: Date.now() });
+  addLine({ name: me(), text: '⏱ 3초 뒤에 같이 재생해요! (' + fmt(t) + ')', ts: Date.now(), mine: true });
+  NET.send({ type: 'countdown', sec: 3, time: t, vid: rv.vid, by: me() });
+  showCountdown(3, () => helperSend('play', t, false, '▶ ' + me() + '님이 재생했어요 (' + fmt(t) + ')'));
+};
+let countTimer = null;
+function showCountdown(sec, done) {
+  clearInterval(countTimer);
+  let n = sec; $('countNum').textContent = n; $('count').hidden = false; vibrate(60);
+  countTimer = setInterval(() => {
+    n--;
+    if (n <= 0) { clearInterval(countTimer); $('countNum').textContent = '▶'; vibrate([80, 40, 80]); setTimeout(() => { $('count').hidden = true; }, 900); if (done) done(); return; }
+    $('countNum').textContent = n; vibrate(40);
+  }, 1000);
+}
+$('count').onclick = () => { $('count').hidden = true; };
+
+// =====================================================================
+// 유튜브: 이 화면 안에서 재생 + 자동 싱크
+// =====================================================================
+let player = null, playerId = null, ytReady = false, ytApiLoading = null;
+let quietUntil = 0, needTap = false, ytPrev = null, freshPlayer = false;
+const now = () => Date.now();
+function loadYTApi() {
+  if (window.YT && window.YT.Player) return Promise.resolve();
+  if (ytApiLoading) return ytApiLoading;
+  ytApiLoading = new Promise((res) => {
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { if (prev) try { prev(); } catch (e) {} res(); };
+    const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.append(s);
+  });
+  return ytApiLoading;
+}
+async function ensurePlayer(id) {
+  if (!id) return;
+  if (player && playerId === id) return;
+  await loadYTApi();
+  if (player && ytReady) {
+    playerId = id; ytPrev = null; quiet(2500);
+    player.cueVideoById({ videoId: id, startSeconds: ref ? refTime() : 0 }); freshPlayer = true;
+    return;
+  }
+  if (player) return;
+  playerId = id; ytReady = false;
+  const host = document.createElement('div'); $('yt').replaceWith(host); host.id = 'yt';
+  player = new YT.Player('yt', {
+    videoId: id,
+    playerVars: { playsinline: 1, rel: 0, modestbranding: 1, origin: location.origin },
+    events: {
+      onReady: () => { ytReady = true; freshPlayer = true; applyRefToPlayer(true); },
+      onStateChange: onYTState,
+      onError: (e) => { toast(e.data === 101 || e.data === 150 ? '이 영상은 다른 사이트 재생이 막혀 있어요. 앱으로 보면서 채팅해 주세요' : '영상을 불러오지 못했어요'); }
+    }
+  });
+}
+function destroyPlayer() {
+  if (!player) return;
+  try { player.destroy(); } catch (e) {}
+  player = null; playerId = null; ytReady = false; ytPrev = null;
+  const host = document.createElement('div'); host.id = 'yt';
+  const cur = $('yt'); if (cur) cur.replaceWith(host); else $('ytWrap').prepend(host);
+}
+const quiet = (ms) => { quietUntil = now() + ms; };
+const ytTime = () => { try { return player.getCurrentTime() || 0; } catch (e) { return 0; } };
+const ytPaused = () => { try { const s = player.getPlayerState(); return s !== 1 && s !== 3; } catch (e) { return true; } };
+const ytVid = () => (rv ? rv.vid : '');
+
+// 기준 상태(ref)를 내 플레이어에 반영
+function applyRefToPlayer(first) {
+  if (!player || !ytReady || !ref) return;
+  const t = refTime();
+  // 실제로 바꿀 게 있을 때만 "내가 바꾼 것" 표시 (사용자 조작을 놓치지 않도록)
+  const fresh = freshPlayer; freshPlayer = false;
+  const needSeek = Math.abs(ytTime() - t) > (first || fresh ? 0.4 : 0.8);
+  const wantPause = ref.paused, isPaused = ytPaused();
+  if (!needSeek && wantPause === isPaused) return;
+  quiet(1500);
+  if (needSeek) { try { player.seekTo(t, true); } catch (e) {} }
+  if (wantPause && !isPaused) { try { player.pauseVideo(); } catch (e) {} }
+  if (!wantPause && isPaused) {
+    try { player.playVideo(); } catch (e) {}
+    // 휴대폰은 첫 재생을 직접 눌러야 함: 재생이 시작되지 않으면 안내
+    setTimeout(() => { if (ref && !ref.paused && ytPaused()) { needTap = true; $('tapStart').hidden = false; } }, 1500);
+  }
+}
+$('tapStart').onclick = () => {
+  $('tapStart').hidden = true; needTap = false;
+  quiet(1800);
+  try { if (ref) player.seekTo(refTime(), true); player.playVideo(); } catch (e) {}
+};
+
+function onYTState(e) {
+  if (e.data === 1) { $('tapStart').hidden = true; needTap = false; }
+  if (now() < quietUntil) return;
+  if (e.data === 1) {           // 재생
+    const t = ytTime(); leader = true; setRef(t, false, me());
+    NET.send({ type: 'play', time: t, vid: ytVid(), label: '▶ ' + me() + '님이 재생했어요 (' + fmt(t) + ')' });
+  } else if (e.data === 2) {    // 정지
+    const t = ytTime(); leader = true; setRef(t, true, me());
+    NET.send({ type: 'pause', time: t, vid: ytVid(), label: '⏸ ' + me() + '님이 일시정지했어요 (' + fmt(t) + ')' });
+  } else if (e.data === 0) {    // 끝남 → 재생목록 다음 영상
+    if (leader || st.role === 'host') playNextInList();
+  }
+}
+// 이동(탐색) 감지: 0.25초마다 위치가 예상과 크게 다르면 사용자가 옮긴 것
+setInterval(() => {
+  if (!player || !ytReady || !isYT()) { ytPrev = null; return; }
+  const cur = { t: ytTime(), paused: ytPaused(), at: performance.now() };
+  const prev = ytPrev; ytPrev = cur;
+  if (!prev || now() < quietUntil) return;
+  let state; try { state = player.getPlayerState(); } catch (e) { return; }
+  if (state === 3) return; // 버퍼링
+  const expected = prev.paused ? prev.t : prev.t + (cur.at - prev.at) / 1000;
+  if (Math.abs(cur.t - expected) > DRIFT) {
+    leader = true; setRef(cur.t, cur.paused, me());
+    NET.send({ type: 'seek', time: cur.t, paused: cur.paused, vid: ytVid(),
+      label: (cur.t >= expected ? '⏩ ' : '⏪ ') + me() + '님이 ' + fmtDelta(cur.t - expected) + ' ' + (cur.t >= expected ? '앞으로' : '뒤로') + ' 이동했어요 (' + fmt(expected) + ' → ' + fmt(cur.t) + ')' });
+  }
+}, 250);
+// 내가 기준이면 3초마다 위치를 알려 줌 (다른 사람들이 맞춤)
+setInterval(() => {
+  if (!connected() || !leader || !isYT() || !player || !ytReady || needTap) return;
+  NET.send({ type: 'state', time: ytTime(), paused: ytPaused(), vid: ytVid(), by: me() });
+}, 3000);
+
+function ytIdFrom(text) {
+  const t = (text || '').trim();
+  if (/^[\w-]{11}$/.test(t)) return t;
+  try {
+    const u = new URL(t); const h = u.hostname.replace(/^(www|m|music)\./, '');
+    if (h === 'youtu.be') return u.pathname.slice(1, 12) || null;
+    if (h === 'youtube.com' || h === 'youtube-nocookie.com') {
+      if (u.searchParams.get('v')) return u.searchParams.get('v').slice(0, 11);
+      const m = u.pathname.match(/^\/(shorts|embed|live|v)\/([\w-]{11})/); if (m) return m[2];
+    }
+  } catch (e) {}
+  return null;
+}
+async function fetchTitle(id) {
+  try { const r = await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + id)); if (r.ok) return (await r.json()).title; } catch (e) {}
+  return null;
+}
+async function openYouTube(id, title) {
+  const vid = 'yt:' + id, url = 'https://www.youtube.com/watch?v=' + id;
+  setRoomVideo(vid, url, title || '');
+  setRef(0, false, me()); leader = true;
+  applyRefToPlayer(true);
+  title = title || await fetchTitle(id) || '유튜브 영상';
+  if (rv && rv.vid === vid) rv.title = title;
+  NET.send({ type: 'nav', url, vid, title, by: me(), label: '🎬 ' + me() + '님이 「' + title + '」을(를) 틀었어요' });
+  NET.send({ type: 'presence', site: 'youtube', watching: true, by: me() });
+}
+$('ytGo').onclick = () => {
+  const id = ytIdFrom($('ytUrl').value);
+  if (!id) { toast('유튜브 영상 링크를 넣어 주세요'); return; }
+  $('ytUrl').value = ''; $('tools').hidden = true;
+  openYouTube(id);
+};
+$('ytUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('ytGo').click(); });
+
+// 공유 재생목록 (컴퓨터에서 만든 유튜브 재생목록)
+function renderPlaylist() {
+  const pl = NET.playlist(); const box = $('pl');
+  if (!pl || !pl.items || !pl.items.length) { box.hidden = true; return; }
+  box.hidden = false; box.textContent = '';
+  const cur = rv && isYT() ? ytIdOf(rv.vid) : null;
+  pl.items.forEach((it) => {
+    const b = document.createElement('button'); b.className = 'plit' + (it.id === cur ? ' now' : '');
+    const img = document.createElement('img'); img.alt = ''; img.loading = 'lazy'; img.src = 'https://i.ytimg.com/vi/' + encodeURIComponent(it.id) + '/mqdefault.jpg';
+    const d = document.createElement('div'); d.textContent = it.title || '';
+    b.append(img, d);
+    b.onclick = () => openYouTube(it.id, it.title);
+    box.append(b);
+  });
+}
+function playNextInList() {
+  const pl = NET.playlist(); if (!pl || !pl.auto || !rv) return;
+  const i = pl.items.findIndex((x) => x.id === ytIdOf(rv.vid));
+  if (i >= 0 && i + 1 < pl.items.length) openYouTube(pl.items[i + 1].id, pl.items[i + 1].title);
+}
+
+// =====================================================================
+// 받은 신호 처리
+// =====================================================================
+NET.onStatus = (s) => {
+  const prev = st.state; st = s;
+  if (s.state === 'connected' && prev !== 'connected') {
+    toast('🔗 연결됐어요');
+    if (st.role === 'host' && rv && isYT() && ytReady) {
+      leader = true;
+      NET.send({ type: 'nav', url: rv.url, vid: rv.vid, title: rv.title, by: me() });
+      NET.send({ type: 'state', time: ytTime(), paused: ytPaused(), force: true, vid: rv.vid, by: me() });
+    }
+  }
+  renderTop();
+};
+NET.onData = (d) => {
+  switch (d.type) {
+    case '_sys': addLine({ sys: true, text: d.text, ts: d.ts }); return;
+    case '_reloadHistory': renderChat(); return;
+    case '_joined':
+      // 새 사람이 들어오면 내가 보던 유튜브 영상과 위치를 알려 줌
+      if (rv && isYT() && ytReady) {
+        NET.send({ type: 'nav', url: rv.url, vid: rv.vid, title: rv.title, by: me() });
+        NET.send({ type: 'state', time: ytTime(), paused: ytPaused(), force: true, vid: rv.vid, by: me() });
+        leader = true;
+      }
+      return;
+    case 'chat': addLine({ name: d.name, text: String(d.text || ''), ts: d.ts }); return;
+    case 'pl_set': renderPlaylist(); return;
+    case 'presence':
+      if (d.by) peerAct[d.by] = { label: d.watching ? (siteLabel(d.site) + ' 시청 중') : (siteLabel(d.site) + ' 둘러보는 중') };
+      if (d.label) { addLine({ sys: true, text: d.label }); }
+      renderTop(); return;
+    case 'nav':
+      if (d.label) addLine({ sys: true, text: d.label });
+      if (d.by) { peerAct[d.by] = { label: siteLabel(siteFromUrl(d.url)) + ' 시청 중' }; renderTop(); }
+      if (d.vid) { setRoomVideo(d.vid, d.url, d.title); leader = false; if (svcOf(d.vid) !== 'yt') vibrate(60); }
+      return;
+    case 'countdown':
+      if (d.vid) setRoomVideo(d.vid);
+      if (d.time != null) setRef(d.time, true, d.by);
+      showCountdown(d.sec || 3);
+      return;
+    case 'play': case 'pause': case 'seek': case 'state':
+      onSync(d); return;
+    case 'ad':
+      if (d.label) addLine({ sys: true, text: d.label });
+      if (d.on && isYT() && player && ytReady) { quiet(1500); try { player.pauseVideo(); } catch (e) {} }
+      return;
+  }
+};
+const siteLabel = (s) => ({ youtube: '유튜브', netflix: '넷플릭스', disney: '디즈니+', tving: '티빙', wavve: '웨이브', coupang: '쿠팡플레이', watcha: '왓챠' }[s] || '영상');
+function siteFromUrl(u) { try { const h = new URL(u).hostname; return /youtube/.test(h) ? 'youtube' : /netflix/.test(h) ? 'netflix' : /disneyplus/.test(h) ? 'disney' : /tving/.test(h) ? 'tving' : /wavve/.test(h) ? 'wavve' : /coupangplay/.test(h) ? 'coupang' : /watcha/.test(h) ? 'watcha' : ''; } catch (e) { return ''; } }
+
+function onSync(d) {
+  if (d.type !== 'state' && d.label) addLine({ sys: true, text: d.label });
+  if (d.vid) setRoomVideo(d.vid);
+  if (!rv || (d.vid && d.vid !== rv.vid)) return;
+  const who = d.by || (d.label ? null : null);
+  if (d.type === 'state') {
+    // 내가 기준이면 다른 사람의 주기 보고는 무시 (방장 쪽 우선)
+    if (leader && !d.force) { if (st.role === 'host') return; leader = false; }
+    if (d.force) leader = false;
+  } else leader = false;
+  const paused = d.type === 'pause' ? true : d.type === 'play' ? false : !!d.paused;
+  setRef(d.time, paused, d.by || ref && ref.by || labelName(d.label));
+  if (isYT()) { applyRefToPlayer(d.type !== 'state'); return; }
+  // 앱으로 보는 영상: 알림 + 진동
+  if (d.type === 'pause') { vibrate([60, 40, 60]); toast('⏸ 멈췄어요 · ' + fmt(d.time) + '에서 멈춰 주세요'); }
+  else if (d.type === 'play') { vibrate(80); toast('▶ 재생! · ' + fmt(d.time) + '부터'); }
+  else if (d.type === 'seek') { vibrate(50); toast('⏩ ' + fmt(d.time) + '(으)로 이동했어요'); }
+}
+const labelName = (l) => { const m = /\s(.+?)님이/.exec(l || ''); return m ? m[1] : null; };
+
+// =====================================================================
+// 휴대폰 화면 관리
+// =====================================================================
+let wakeLock = null;
+async function keepAwake() { try { if ('wakeLock' in navigator && !document.hidden) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {} }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  NET.kick();
+  if (!$('room').hidden) keepAwake();
+});
+window.addEventListener('online', () => NET.kick());
+window.addEventListener('pageshow', () => NET.kick());
+
+// 초대 링크로 들어왔고 이름이 저장돼 있으면 참여 버튼에 포커스
+if (qRoom) setTimeout(() => ($('name').value ? $('join') : $('name')).focus(), 50);
+})();
+</script>
+</body>
+</html>
