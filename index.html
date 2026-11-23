@@ -107,6 +107,17 @@
   .msg.mine { align-self: flex-end; text-align: right; }
   .msg.mine .b { background: var(--amber); color: var(--amber-ink); border-radius: 16px 16px 5px 16px; text-align: left; }
   .msg.grp { margin-bottom: -4px; }
+  /* 방장 넘기기 */
+  .leavedlg { position: fixed; inset: 0; z-index: 60; background: rgba(8,9,20,.7); display: flex; align-items: flex-end; justify-content: center; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  .leavedlg[hidden] { display: none; }
+  .leavedlg .card { width: 100%; max-width: 420px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .leavedlg h3 { margin: 0; font-size: 17px; color: var(--text); }
+  .leavedlg p { margin: 0 0 6px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+  .leavedlg button { border: 0; border-radius: 12px; padding: 14px; font: inherit; font-size: 15px; font-weight: 700; background: var(--panel2); color: var(--text); }
+  .leavedlg button.yes { background: var(--amber); color: var(--amber-ink); }
+  .leavedlg button.no { color: #FF9A9A; }
+  .leavedlg button.cancel { background: transparent; color: var(--muted); }
+  .leavedlg button.pick { text-align: left; }
   /* 답장(인용) */
   .msg .b { position: relative; }
   .msg .rp { position: absolute; top: 50%; margin-top: -15px; right: -38px; width: 30px; height: 30px; border-radius: 50%; border: 0; padding: 0;
@@ -200,6 +211,7 @@
       <div class="btns"><button id="shareBtn">🔗 초대 링크 보내기</button></div>
       <div class="btns"><button id="renameBtn">이름 바꾸기</button><button id="leaveBtn" class="danger">방에서 나가기</button></div>
     </div>
+    <div id="leaveDlg" class="leavedlg" hidden><div class="card"></div></div>
   </header>
 
   <div class="main">
@@ -255,6 +267,7 @@ const NET = (() => {
   const guests = new Map(), dropped = new Map();
   let hostConn = null, hostName = null, hostSeen = 0, roster = [];
   let retryTimer = null, retryUntil = 0, everJoined = false, roomFull = false, leaving = false, joinFinish = null;
+  let handoverName = null, takeover = null; // 방장 넘기기
   const chatLog = [], pending = [];
   let playlist = null;
   const api = { onData: () => {}, onStatus: () => {} };
@@ -263,7 +276,7 @@ const NET = (() => {
   const pushLog = (e) => { chatLog.push(e); if (chatLog.length > 200) chatLog.shift(); };
   const toApp = (d) => { try { api.onData(d); } catch (e) { console.error(e); } };
   function members() {
-    if (role === 'host') return [...guests.values()].filter((g) => g.hello).map((g) => ({ name: g.name, host: false }));
+    if (role === 'host') return [...guests].filter(([, g]) => g.hello).map(([id, g]) => ({ id, name: g.name, host: false }));
     const myId = peer && peer.id;
     return roster.filter((m) => m.id !== myId).map((m) => ({ name: m.name, host: !!m.host }));
   }
@@ -311,8 +324,10 @@ const NET = (() => {
         g.name = name; g.hello = true;
         const back = (g.returning && old === name) || dropped.get(id) === name;
         dropped.delete(id);
-        if (!was) sysMsg(back ? '🔗 ' + name + '님이 다시 연결됐어요' : name + '님이 들어왔어요', true, id);
-        else if (old !== name) sysMsg(old + '님이 이름을 ' + name + '(으)로 바꿨어요', true);
+        const quietBack = takeover && Date.now() < takeover.until && takeover.ids.has(id);
+        if (quietBack) takeover.ids.delete(id);
+        if (!was && !quietBack) sysMsg(back ? '🔗 ' + name + '님이 다시 연결됐어요' : name + '님이 들어왔어요', true, id);
+        else if (old && old !== name) sysMsg(old + '님이 이름을 ' + name + '(으)로 바꿨어요', true);
         g.returning = false; state = 'connected';
         broadcastRoster(); report();
         if (!was) toApp({ type: '_joined', name });
@@ -330,6 +345,7 @@ const NET = (() => {
     const g = guests.get(id); if (!g) return;
     guests.delete(id);
     try { g.conn.close(); } catch (e) {}
+    if (leaving) return;
     if (g.hello) {
       if (reason !== 'left') dropped.set(id, g.name);
       sysMsg(reason === 'left' ? g.name + '님이 나갔어요' : '⚠ ' + g.name + '님과 연결이 끊겼어요 (다시 연결을 기다리는 중)', true);
@@ -338,17 +354,18 @@ const NET = (() => {
     if (![...guests.values()].some((x) => x.hello)) state = 'waiting';
     report();
   }
-  function create(name) {
+  function create(name, fixedCode, takingOver) {
     return new Promise((resolve) => {
       let done = false, tries = 0;
       const finish = (r) => { if (!done) { done = true; resolve(r); } };
       myName = name || '익명'; role = 'host'; state = 'connecting'; leaving = false;
       const open = () => {
-        code = genCode();
+        code = fixedCode || genCode();
         if (peer) { try { peer.destroy(); } catch (e) {} }
         peer = new Peer(PREFIX + code, { debug: 0 });
         peer.on('open', () => {
-          state = 'waiting';
+          state = [...guests.values()].some((g) => g.hello) ? 'connected' : 'waiting';
+          if (takingOver) { sysMsg('👑 같은 코드(' + code + ')로 방을 이어서 열었어요. 다른 사람들이 곧 다시 연결돼요'); report(); finish({ ok: true, code }); return; }
           sysMsg('방을 만들었어요. 코드 ' + code + '를 친구들에게 보내 주세요 (최대 ' + MAX_MEMBERS + '명)');
           report(); finish({ ok: true, code });
         });
@@ -356,13 +373,13 @@ const NET = (() => {
         peer.on('disconnected', () => { try { if (!peer.destroyed) peer.reconnect(); } catch (e) {} });
         peer.on('error', (e) => {
           if (done) return;
-          if (e.type === 'unavailable-id' && tries++ < 3) { open(); return; }
+          if (e.type === 'unavailable-id' && tries++ < (takingOver ? 20 : 3)) { setTimeout(open, takingOver ? 1500 : 0); return; }
           state = 'error'; report();
           finish({ ok: false, error: '연결 서버에 접속하지 못했어요 (' + e.type + ')' });
         });
       };
       open();
-      setTimeout(() => finish({ ok: false, error: '연결 서버 응답이 없어요. 인터넷 연결을 확인해 주세요.' }), 15000);
+      setTimeout(() => finish({ ok: false, error: '연결 서버 응답이 없어요. 인터넷 연결을 확인해 주세요.' }), takingOver ? 45000 : 15000);
     });
   }
   // ---- 참여자 ----
@@ -389,7 +406,8 @@ const NET = (() => {
       if (d.type === '_hello') {
         const name = String(d.name || '익명').slice(0, 20);
         if (!everJoined) sysMsg('🎉 ' + name + '님의 방에 들어왔어요');
-        else if (!hostName) sysMsg('🔗 다시 연결됐어요');
+        else if (!hostName) sysMsg(handoverName ? '👑 새 방장 ' + name + '님에게 다시 연결됐어요' : '🔗 다시 연결됐어요');
+        handoverName = null;
         everJoined = true; hostName = name; report();
         if (joinFinish) { joinFinish({ ok: true, code }); joinFinish = null; }
         return;
@@ -404,6 +422,7 @@ const NET = (() => {
         }
         return;
       }
+      if (d.type === '_handover') { onHandover(d); return; }
       if (d.type === '_sys') { pushLog({ sys: true, text: String(d.text || '').slice(0, 200), ts: d.ts || Date.now() }); toApp({ type: '_sys', text: d.text, ts: d.ts }); return; }
       if (d.type === '_bye') { hostConn = null; stopRetry(); state = 'disconnected'; sysMsg('방장 ' + (hostName || '') + '님이 방을 닫았어요'); roster = []; report(); return; }
       handleData(d);
@@ -416,8 +435,35 @@ const NET = (() => {
     if (c) { try { c.close(); } catch (e) {} }
     if (roomFull || leaving) return;
     hostName = null; roster = [];
-    sysMsg('⚠ 연결이 끊겼어요. 다시 연결하는 중…');
+    if (!handoverName) sysMsg('⚠ 연결이 끊겼어요. 다시 연결하는 중…');
     startRetry();
+  }
+  // 방장이 나가면서 방장을 넘김
+  function onHandover(d) {
+    const myId = peer && peer.id, oldHost = hostName || '방장';
+    if (d.to && d.to === myId) { becomeHost(d, oldHost); return; }
+    handoverName = String(d.toName || '').slice(0, 20) || '새 방장';
+    sysMsg('👑 ' + oldHost + '님이 나가면서 ' + handoverName + '님에게 방장을 넘겼어요. 다시 연결하는 중…');
+  }
+  async function becomeHost(d, oldHost) {
+    const myId = peer && peer.id;
+    const others = roster.filter((m) => !m.host && m.id && m.id !== myId);
+    if (Array.isArray(d.log) && d.log.length) {
+      chatLog.length = 0;
+      for (const e of d.log.slice(-200)) if (e && typeof e === 'object') chatLog.push(e.sys ? e : { ...e, mine: e.name === myName && !!e.name });
+    }
+    if (d.playlist && Array.isArray(d.playlist.items)) playlist = { items: d.playlist.items, cur: d.playlist.cur, auto: d.playlist.auto };
+    const c = hostConn; hostConn = null; stopRetry();
+    if (c) { try { c.close(); } catch (e) {} }
+    try { if (peer) peer.destroy(); } catch (e) {}
+    peer = null; roster = []; hostName = null; handoverName = null;
+    for (const m of others) dropped.set(m.id, m.name);
+    takeover = { until: Date.now() + 120000, ids: new Set(others.map((m) => m.id)) };
+    role = 'host'; state = 'connecting'; report();
+    sysMsg('👑 ' + oldHost + '님이 나가면서 방장을 넘겨줬어요. 이제 내가 방장이에요');
+    await new Promise((res) => setTimeout(res, 1500));
+    const r = await create(myName, code, true);
+    if (!r || !r.ok) sysMsg('⚠ 방을 이어받지 못했어요. 나가기 후 새로 방을 만들어 주세요');
   }
   function stopRetry() { clearTimeout(retryTimer); retryTimer = null; retryUntil = 0; }
   function startRetry(fast) {
@@ -479,10 +525,17 @@ const NET = (() => {
     if (delivered && d.label) sysMsg(String(d.label).slice(0, 200));
     return delivered;
   }
-  function leave() {
+  function leave(handoverTo) {
     leaving = true; stopRetry();
-    if (role === 'host') sendGuests({ type: '_bye' }); else safeSend(hostConn, { type: '_bye' });
-    setTimeout(() => { try { peer && peer.destroy(); } catch (e) {} peer = null; guests.clear(); hostConn = null; roster = []; chatLog.length = 0; playlist = null; state = 'idle'; role = null; code = null; report(); }, 250);
+    const g = role === 'host' && handoverTo ? guests.get(handoverTo) : null;
+    let wait = 250;
+    if (g && g.hello && g.conn && g.conn.open) {
+      // 방장 넘기기: 대화 기록과 재생목록을 함께 넘기고 나만 나감
+      const log = chatLog.slice(-120).map((e) => { const x = { ...e }; delete x.mine; return x; });
+      sendGuests({ type: '_handover', to: handoverTo, toName: g.name, log, playlist });
+      wait = 600;
+    } else if (role === 'host') sendGuests({ type: '_bye' }); else safeSend(hostConn, { type: '_bye' });
+    setTimeout(() => { try { peer && peer.destroy(); } catch (e) {} peer = null; guests.clear(); hostConn = null; roster = []; chatLog.length = 0; playlist = null; state = 'idle'; role = null; code = null; report(); }, wait);
   }
   function setName(n) {
     myName = n || '익명';
@@ -593,10 +646,37 @@ async function share() {
 }
 $('codeChip').onclick = share; $('shareBtn').onclick = share;
 $('renameBtn').onclick = () => { const n = prompt('새 이름', me()); if (n != null && n.trim()) { store.set('name', n.trim().slice(0, 20)); NET.setName(n.trim().slice(0, 20)); } };
+function leaveNow(handoverTo) {
+  NET.leave(handoverTo);
+  setTimeout(() => location.replace(location.pathname), handoverTo ? 800 : 400);
+}
 $('leaveBtn').onclick = () => {
-  if (!confirm('방에서 나갈까요?')) return;
-  NET.leave();
-  setTimeout(() => location.replace(location.pathname), 400);
+  const s = NET.status();
+  const others = s.role === 'host' ? (s.members || []).filter((m) => m.id) : [];
+  if (!others.length) { if (confirm('방에서 나갈까요?')) leaveNow(); return; }
+  // 방장이면: 방장을 넘기고 나갈지 물어봄
+  $('sheet').hidden = true;
+  const dlg = $('leaveDlg'), card = dlg.querySelector('.card');
+  const btn = (cls, text, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = text; b.onclick = fn; card.append(b); };
+  const head = (t, d) => { const h = document.createElement('h3'); h.textContent = t; const p = document.createElement('p'); p.textContent = d; card.append(h, p); };
+  const close = () => { dlg.hidden = true; };
+  const step1 = () => {
+    card.textContent = '';
+    head('방장을 넘기고 나갈까요?', '넘기면 방은 그대로 남고 나만 나가요. 넘기지 않으면 방이 닫히고 모두 연결이 끊겨요.');
+    btn('yes', '예, 방장을 넘길게요', step2);
+    btn('no', '아니요, 방 닫기', () => { close(); leaveNow(); });
+    btn('cancel', '취소', close);
+  };
+  const step2 = () => {
+    const list = (NET.status().members || []).filter((m) => m.id);
+    if (!list.length) { close(); toast('넘겨받을 사람이 없어요'); return; }
+    card.textContent = '';
+    head('누구에게 방장을 넘길까요?', '고른 사람이 새 방장이 되고, 다른 사람들은 자동으로 다시 연결돼요.');
+    for (const m of list) btn('pick', '👑 ' + m.name, () => { close(); toast('👑 ' + m.name + '님에게 방장을 넘기고 나가요'); leaveNow(m.id); });
+    btn('cancel', '← 뒤로', step1);
+  };
+  dlg.onclick = (e) => { if (e.target === dlg) close(); };
+  step1(); dlg.hidden = false;
 };
 $('ytToggle').onclick = () => { $('tools').hidden = !$('tools').hidden; if (!$('tools').hidden) $('ytUrl').focus(); };
 
