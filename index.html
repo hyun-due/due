@@ -45,7 +45,9 @@
   .note b { color: var(--text); }
 
   /* ---------- 방 ---------- */
-  #room { height: 100%; display: flex; flex-direction: column; }
+  /* 방 화면은 "실제로 보이는 영역"에 고정: 자판이 올라와도 화면 전체가 밀려 올라가지 않고 채팅 칸만 줄어듦 */
+  #room { position: fixed; left: 0; right: 0; top: 0; height: var(--app-h, 100%); display: flex; flex-direction: column; will-change: transform; }
+  html.kb .composer { padding-bottom: 8px; }
   .bar { flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: calc(8px + var(--safe-t)) 10px 8px; background: var(--panel); border-bottom: 1px solid var(--line); position: relative; z-index: 5; }
   .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); flex-shrink: 0; margin-left: 2px; }
   .dot.ok { background: var(--mint); } .dot.wait { background: var(--amber); } .dot.bad { background: var(--bad); }
@@ -530,6 +532,7 @@ function enterRoom() {
   $('lobby').hidden = true; $('room').hidden = false;
   try { history.replaceState(null, '', location.pathname + '?room=' + NET.status().code); } catch (e) {}
   renderChat(); renderTop(); renderStage();
+  if (typeof fitViewport === 'function') fitViewport();
   keepAwake();
 }
 
@@ -954,6 +957,37 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('online', () => NET.kick());
 window.addEventListener('pageshow', () => NET.kick());
+
+// ---------- 자판이 올라올 때 화면 고정 ----------
+// 아이폰 사파리는 입력칸을 누르면 페이지 전체를 위로 밀어 올림. 실제로 보이는 영역(visualViewport)에
+// 방 화면을 맞춰서, 영상은 위에 그대로 두고 채팅 칸만 줄어들게 함.
+const vv = window.visualViewport;
+let fullH = 0;
+function fitViewport() {
+  const h = Math.round(vv ? vv.height : window.innerHeight);
+  fullH = Math.max(fullH, h);
+  const list = $('chat');
+  const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  document.documentElement.style.setProperty('--app-h', h + 'px');
+  const off = vv ? Math.max(0, vv.offsetTop) : 0;
+  $('room').style.transform = off ? 'translateY(' + off + 'px)' : '';
+  document.documentElement.classList.toggle('kb', h < fullH - 120);
+  if (atBottom) list.scrollTop = list.scrollHeight;
+}
+if (vv) { vv.addEventListener('resize', fitViewport); vv.addEventListener('scroll', fitViewport); }
+window.addEventListener('resize', fitViewport);
+window.addEventListener('orientationchange', () => { fullH = 0; setTimeout(fitViewport, 300); });
+// 입력칸을 누른 뒤 사파리가 페이지를 밀어 올렸으면 되돌리고, 채팅 맨 아래가 보이게
+$('msg').addEventListener('focus', () => {
+  for (const ms of [50, 300, 600]) setTimeout(() => { if (!vv || vv.offsetTop === 0) window.scrollTo(0, 0); fitViewport(); $('chat').scrollTop = $('chat').scrollHeight; }, ms);
+});
+$('msg').addEventListener('blur', () => setTimeout(() => { window.scrollTo(0, 0); fitViewport(); }, 100));
+// 방 화면에서 페이지 자체가 스크롤되지 않게 (채팅 목록 안에서만 스크롤)
+document.addEventListener('touchmove', (e) => {
+  if ($('room').hidden) return;
+  if (!e.target.closest('.chat, .sheet, .pl, .ytwrap')) e.preventDefault();
+}, { passive: false });
+fitViewport();
 
 // 초대 링크로 들어왔고 이름이 저장돼 있으면 참여 버튼에 포커스
 if (qRoom) setTimeout(() => ($('name').value ? $('join') : $('name')).focus(), 50);
