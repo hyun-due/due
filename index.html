@@ -99,7 +99,7 @@
   .plit div { font-size: 11px; line-height: 1.3; margin-top: 4px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .plit.now img { outline: 2px solid var(--amber); }
 
-  .chat { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; overscroll-behavior: contain; }
+  .chat { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 12px; display: flex; flex-direction: column; gap: 8px; overscroll-behavior: contain; }
   .msg { max-width: 82%; align-self: flex-start; }
   .msg .n { font-size: 12px; color: var(--muted); margin: 0 0 2px 4px; }
   .msg .b { background: var(--panel2); padding: 8px 12px; border-radius: 16px 16px 16px 5px; word-break: break-word; white-space: pre-wrap; }
@@ -107,6 +107,29 @@
   .msg.mine { align-self: flex-end; text-align: right; }
   .msg.mine .b { background: var(--amber); color: var(--amber-ink); border-radius: 16px 16px 5px 16px; text-align: left; }
   .msg.grp { margin-bottom: -4px; }
+  /* 답장(인용) */
+  .msg .b { position: relative; }
+  .msg .rp { position: absolute; top: 50%; margin-top: -15px; right: -38px; width: 30px; height: 30px; border-radius: 50%; border: 0; padding: 0;
+    background: var(--panel2); color: var(--text); font-size: 15px; line-height: 30px; text-align: center; display: none; }
+  .msg.mine .rp { right: auto; left: -38px; }
+  .msg.sel .rp { display: block; }
+  @media (hover: hover) { .msg:hover .rp { display: block; } }
+  .msg .rp:active { background: var(--amber); color: var(--amber-ink); }
+  .msg .q { display: block; font-size: 12.5px; line-height: 1.35; padding: 4px 8px; margin: 0 0 6px; border-left: 3px solid rgba(255,255,255,.4);
+    background: rgba(255,255,255,.07); border-radius: 6px; opacity: .72; text-align: left; white-space: normal; }
+  .msg .q b { display: block; font-size: 11.5px; }
+  .msg .q span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .msg.mine .q { border-left-color: rgba(27,20,0,.5); background: rgba(27,20,0,.1); }
+  .msg.flash .b { animation: flash 1.4s ease-out; }
+  .msg.mine.flash .b { animation-name: flashMine; }
+  @keyframes flashMine { 0%, 55% { box-shadow: 0 0 0 3px #fff; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  @keyframes flash { 0%, 55% { box-shadow: 0 0 0 3px var(--amber); } 100% { box-shadow: 0 0 0 0 transparent; } }
+  .replybar { flex-shrink: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); background: var(--panel);
+    border-top: 1px solid var(--line); padding: 7px 10px 0; }
+  .replybar .rq { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-left: 3px solid var(--amber); padding-left: 8px; }
+  .replybar .rq b { color: var(--text); }
+  .replybar button { border: 0; background: transparent; color: var(--muted); font-size: 16px; width: 32px; height: 28px; padding: 0; }
+  .replybar:not([hidden]) + .composer { border-top: 0; }
   .sys { align-self: center; text-align: center; font-size: 12px; color: var(--muted); padding: 0 12px; }
   .composer { flex-shrink: 0; display: flex; gap: 8px; padding: 8px 10px calc(8px + var(--safe-b)); border-top: 1px solid var(--line); background: var(--panel); }
   .composer textarea { flex: 1; resize: none; height: 44px; max-height: 120px; border-radius: 22px; border: 1px solid var(--line); background: var(--bg); padding: 10px 16px; }
@@ -207,6 +230,7 @@
     </div>
     <div class="right">
       <div id="chat" class="chat" aria-live="polite"></div>
+      <div id="replybar" class="replybar" hidden><span class="rq" id="replyText"></span><button type="button" id="replyX" aria-label="답장 취소">✕</button></div>
       <form id="composer" class="composer">
         <textarea id="msg" rows="1" maxlength="300" placeholder="메시지 입력" enterkeyhint="send"></textarea>
         <button type="submit">전송</button>
@@ -235,6 +259,7 @@ const NET = (() => {
   let playlist = null;
   const api = { onData: () => {}, onStatus: () => {} };
   const keepPl = (d) => { playlist = { items: d.items || [], cur: d.cur, auto: d.auto }; };
+  const cleanR = (r) => (r && typeof r === 'object' && r.k) ? { k: String(r.k).slice(0, 200), name: String(r.name || '').slice(0, 20), text: String(r.text || '').slice(0, 100) } : undefined;
   const pushLog = (e) => { chatLog.push(e); if (chatLog.length > 200) chatLog.shift(); };
   const toApp = (d) => { try { api.onData(d); } catch (e) { console.error(e); } };
   function members() {
@@ -260,7 +285,7 @@ const NET = (() => {
   function handleData(d) {
     if (d.type === 'pl_set') keepPl(d);
     if (d.label && ['play', 'pause', 'seek', 'nav', 'presence', 'ad', 'countdown'].includes(d.type)) pushLog({ sys: true, text: String(d.label).slice(0, 200), ts: Date.now() });
-    if (d.type === 'chat') pushLog({ name: String(d.name || '').slice(0, 20), text: String(d.text || '').slice(0, 300), ts: d.ts || Date.now() });
+    if (d.type === 'chat') pushLog({ name: String(d.name || '').slice(0, 20), text: String(d.text || '').slice(0, 300), ts: d.ts || Date.now(), reply: cleanR(d.reply) });
     toApp(d);
   }
   // ---- 방장 ----
@@ -444,7 +469,7 @@ const NET = (() => {
 
   function send(d) {
     if (d.type === 'pl_set') keepPl(d);
-    if (d.type === 'chat') pushLog({ name: myName, text: d.text, ts: d.ts, mine: true });
+    if (d.type === 'chat') pushLog({ name: myName, text: d.text, ts: d.ts, mine: true, reply: cleanR(d.reply) });
     let delivered;
     if (role === 'host') delivered = sendGuests(d) > 0;
     else {
@@ -585,7 +610,26 @@ function addLine(e) {
   else {
     el.className = 'msg' + (e.mine ? ' mine' : '');
     const n = document.createElement('div'); n.className = 'n'; n.textContent = e.name || '';
-    const b = document.createElement('div'); b.className = 'b'; b.textContent = e.text;
+    const b = document.createElement('div'); b.className = 'b';
+    const rq = cleanReply(e.reply);
+    if (rq) {
+      // 인용한 메시지 (흐리게). 누르면 원래 메시지로 이동
+      const qd = document.createElement('div'); qd.className = 'q';
+      const qn = document.createElement('b'); qn.textContent = rq.name;
+      const qt = document.createElement('span'); qt.textContent = rq.text;
+      qd.append(qn, qt);
+      noSteal(qd);
+      qd.addEventListener('click', (ev) => { ev.stopPropagation(); jumpTo(rq.k); });
+      b.append(qd);
+    }
+    b.append(e.text);
+    const rp = document.createElement('button'); rp.type = 'button'; rp.className = 'rp'; rp.textContent = '↳'; rp.setAttribute('aria-label', '답장');
+    noSteal(rp);
+    rp.addEventListener('click', (ev) => { ev.stopPropagation(); setReply(e); });
+    b.append(rp);
+    el.dataset.k = msgKey(e);
+    // 휴대폰: 말풍선을 누르면 답장 버튼이 나타남
+    b.addEventListener('click', () => selectMsg(el));
     const t = document.createElement('div'); t.className = 't'; t.textContent = clock(e.ts);
     if (!e.mine) el.append(n);
     el.append(b, t);
@@ -597,11 +641,50 @@ function addLine(e) {
   while (list.children.length > 300) list.firstChild.remove();
   if (near || e.mine) list.scrollTop = list.scrollHeight;
 }
+// ---------- 답장(인용) ----------
+// 메시지 구분값: 보낸 사람 + 보낸 시각 + 내용 앞부분 (확장 프로그램과 같은 규칙이라 서로 가리킬 수 있음)
+const msgKey = (e) => (e.name || '') + '|' + (e.ts || 0) + '|' + String(e.text || '').slice(0, 24);
+function cleanReply(r) {
+  if (!r || typeof r !== 'object' || !r.k) return undefined;
+  return { k: String(r.k).slice(0, 200), name: String(r.name || '').slice(0, 20), text: String(r.text || '').slice(0, 100) };
+}
+// 버튼을 눌러도 입력칸 커서(=자판)를 빼앗지 않게
+function noSteal(node) { for (const ev of ['mousedown', 'pointerdown']) node.addEventListener(ev, (x) => x.preventDefault()); }
+let replyTo = null, selEl = null;
+function selectMsg(el) {
+  if (selEl && selEl !== el) selEl.classList.remove('sel');
+  el.classList.toggle('sel'); selEl = el.classList.contains('sel') ? el : null;
+}
+function setReply(e) {
+  replyTo = { k: msgKey(e), name: e.name || '', text: String(e.text || '').slice(0, 100) };
+  const rt = $('replyText'); rt.textContent = '';
+  const who = document.createElement('b'); who.textContent = (e.mine ? '나' : (e.name || '상대')) + '에게 답장';
+  rt.append(who, ' · ' + replyTo.text);
+  $('replybar').hidden = false;
+  if (selEl) { selEl.classList.remove('sel'); selEl = null; }
+  $('msg').focus({ preventScroll: true });
+  if (typeof fitViewport === 'function') setTimeout(fitViewport, 50);
+}
+function clearReply() { replyTo = null; $('replybar').hidden = true; }
+noSteal($('replyX'));
+$('replyX').onclick = clearReply;
+function jumpTo(k) {
+  const target = [...$('chat').children].find((x) => x.dataset && x.dataset.k === k);
+  if (!target) { toast('원래 메시지가 너무 오래돼서 찾을 수 없어요'); return; }
+  target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  target.classList.remove('flash'); void target.offsetWidth; target.classList.add('flash');
+  setTimeout(() => target.classList.remove('flash'), 1500);
+}
+document.addEventListener('click', (ev) => { if (selEl && !selEl.contains(ev.target)) { selEl.classList.remove('sel'); selEl = null; } });
+$('msg').addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && replyTo) { ev.preventDefault(); clearReply(); } });
+
 function renderChat() { $('chat').textContent = ''; lastGrp = null; for (const e of NET.log()) addLine(e); $('chat').scrollTop = $('chat').scrollHeight; }
 $('composer').onsubmit = (e) => {
   e.preventDefault();
   const t = $('msg').value.trim(); if (!t) return;
   const m = { type: 'chat', name: me(), text: t.slice(0, 300), ts: Date.now() };
+  if (replyTo) m.reply = replyTo;
+  clearReply();
   NET.send(m); addLine({ ...m, mine: true });
   $('msg').value = ''; store.set('draft', '');
   if (!connected()) addLine({ sys: true, text: '(친구가 연결되면 전송돼요)' });
@@ -913,7 +996,7 @@ NET.onData = (d) => {
         leader = true;
       }
       return;
-    case 'chat': addLine({ name: d.name, text: String(d.text || ''), ts: d.ts }); return;
+    case 'chat': addLine({ name: d.name, text: String(d.text || ''), ts: d.ts, reply: cleanReply(d.reply) }); return;
     case 'pl_set': renderPlaylist(); return;
     case 'presence':
       if (d.by) peerAct[d.by] = { label: d.watching ? (siteLabel(d.site) + ' 시청 중') : (siteLabel(d.site) + ' 둘러보는 중') };
