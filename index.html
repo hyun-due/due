@@ -718,8 +718,8 @@ let rv = null, ref = null, leader = false;
 const svcOf = (vid) => (vid || '').split(':')[0];
 const isYT = () => !!(rv && svcOf(rv.vid) === 'yt');
 const ytIdOf = (vid) => (vid || '').slice(3);
-const refTime = () => !ref ? 0 : ref.paused ? ref.t : ref.t + (performance.now() - ref.at) / 1000;
-function setRef(t, paused, by) { ref = { t: Number(t) || 0, paused: !!paused, at: performance.now(), by: by || (ref && ref.by) }; }
+const refTime = () => !ref ? 0 : ref.paused ? ref.t : ref.t + (Date.now() - ref.at) / 1000;
+function setRef(t, paused, by) { ref = { t: Number(t) || 0, paused: !!paused, at: Date.now(), by: by || (ref && ref.by) }; }
 
 function setRoomVideo(vid, url, title) {
   if (!vid) return false;
@@ -810,6 +810,10 @@ $('count').onclick = () => { $('count').hidden = true; };
 // =====================================================================
 let player = null, playerId = null, ytReady = false, ytApiLoading = null;
 let quietUntil = 0, needTap = false, ytPrev = null, freshPlayer = false;
+// 다른 앱을 보러 나갔다 오기: 휴대폰은 화면을 벗어나면 영상을 강제로 멈추는데,
+// 이 멈춤은 다른 사람에게 보내지 않고, 돌아오면 방에서 재생 중인 위치로 바로 이어서 재생함
+let awayAt = 0;          // 마지막으로 화면을 벗어난 시각
+const awayNow = () => document.hidden || now() - awayAt < 1500;
 const now = () => Date.now();
 function loadYTApi() {
   if (window.YT && window.YT.Player) return Promise.resolve();
@@ -857,7 +861,7 @@ const ytVid = () => (rv ? rv.vid : '');
 
 // 기준 상태(ref)를 내 플레이어에 반영
 function applyRefToPlayer(first) {
-  if (!player || !ytReady || !ref) return;
+  if (!player || !ytReady || !ref || document.hidden) return;
   const t = refTime();
   // 실제로 바꿀 게 있을 때만 "내가 바꾼 것" 표시 (사용자 조작을 놓치지 않도록)
   const fresh = freshPlayer; freshPlayer = false;
@@ -886,8 +890,15 @@ function onYTState(e) {
     const t = ytTime(); leader = true; setRef(t, false, me());
     NET.send({ type: 'play', time: t, vid: ytVid(), label: '▶ ' + me() + '님이 재생했어요 (' + fmt(t) + ')' });
   } else if (e.data === 2) {    // 정지
-    const t = ytTime(); leader = true; setRef(t, true, me());
-    NET.send({ type: 'pause', time: t, vid: ytVid(), label: '⏸ ' + me() + '님이 일시정지했어요 (' + fmt(t) + ')' });
+    const t = ytTime(), at = now();
+    if (awayNow()) return;
+    // 화면을 벗어나면서 생긴 멈춤인지 잠깐 기다렸다가 확인 (멈춤 신호가 화면 전환보다 먼저 올 때가 있음)
+    setTimeout(() => {
+      if (awayAt >= at - 800 || document.hidden || now() < quietUntil) return;
+      if (!ytPaused()) return;
+      leader = true; setRef(t, true, me());
+      NET.send({ type: 'pause', time: t, vid: ytVid(), label: '⏸ ' + me() + '님이 일시정지했어요 (' + fmt(t) + ')' });
+    }, 700);
   } else if (e.data === 0) {    // 끝남 → 재생목록 다음 영상
     if (leader || st.role === 'host') playNextInList();
   }
@@ -897,7 +908,7 @@ setInterval(() => {
   if (!player || !ytReady || !isYT()) { ytPrev = null; return; }
   const cur = { t: ytTime(), paused: ytPaused(), at: performance.now() };
   const prev = ytPrev; ytPrev = cur;
-  if (!prev || now() < quietUntil) return;
+  if (!prev || now() < quietUntil || awayNow()) return;
   let state; try { state = player.getPlayerState(); } catch (e) { return; }
   if (state === 3) return; // 버퍼링
   const expected = prev.paused ? prev.t : prev.t + (cur.at - prev.at) / 1000;
@@ -909,7 +920,7 @@ setInterval(() => {
 }, 250);
 // 내가 기준이면 3초마다 위치를 알려 줌 (다른 사람들이 맞춤)
 setInterval(() => {
-  if (!connected() || !leader || !isYT() || !player || !ytReady || needTap) return;
+  if (!connected() || !leader || !isYT() || !player || !ytReady || needTap || awayNow()) return;
   NET.send({ type: 'state', time: ytTime(), paused: ytPaused(), vid: ytVid(), by: me() });
 }, 3000);
 
@@ -1048,13 +1059,23 @@ const labelName = (l) => { const m = /\s(.+?)님이/.exec(l || ''); return m ? m
 // =====================================================================
 let wakeLock = null;
 async function keepAwake() { try { if ('wakeLock' in navigator && !document.hidden) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {} }
+function goneAway() { awayAt = now(); ytPrev = null; }
+function cameBack() {
+  awayAt = now(); ytPrev = null;
+  if (!isYT() || !player || !ytReady || !ref) return;
+  // 방에서는 계속 재생 중이었으니, 지금쯤 위치로 옮겨서 바로 이어 재생
+  setTimeout(() => { freshPlayer = true; applyRefToPlayer(true); }, 300);
+}
+window.addEventListener('pagehide', goneAway);
+document.addEventListener('freeze', goneAway);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return;
+  if (document.hidden) { goneAway(); return; }
+  cameBack();
   NET.kick();
   if (!$('room').hidden) keepAwake();
 });
 window.addEventListener('online', () => NET.kick());
-window.addEventListener('pageshow', () => NET.kick());
+window.addEventListener('pageshow', (e) => { if (e.persisted) cameBack(); NET.kick(); });
 
 // ---------- 자판이 올라올 때 화면 고정 ----------
 // 아이폰 사파리는 입력칸을 누르면 페이지 전체를 위로 밀어 올림. 실제로 보이는 영역(visualViewport)에
