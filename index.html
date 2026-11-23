@@ -605,9 +605,24 @@ $('composer').onsubmit = (e) => {
   NET.send(m); addLine({ ...m, mine: true });
   $('msg').value = ''; store.set('draft', '');
   if (!connected()) addLine({ sys: true, text: '(친구가 연결되면 전송돼요)' });
+  // 자판이 열려 있었으면 그대로 유지 (입력칸에 커서를 다시 둠)
+  if (keepKb) $('msg').focus({ preventScroll: true });
 };
+// 전송 버튼을 눌러도 입력칸의 커서(=자판)가 빠지지 않게: 버튼이 포커스를 가져가지 못하게 막고 직접 전송
+let keepKb = false;
+{
+  const sendBtn = $('composer').querySelector('button');
+  const press = (e) => {
+    keepKb = document.activeElement === $('msg');
+    e.preventDefault();
+  };
+  sendBtn.addEventListener('mousedown', press);
+  sendBtn.addEventListener('touchstart', press, { passive: false });
+  sendBtn.addEventListener('touchend', (e) => { e.preventDefault(); $('composer').requestSubmit(); keepKb = false; }, { passive: false });
+  sendBtn.addEventListener('click', () => { setTimeout(() => { keepKb = false; }, 0); });
+}
 $('msg').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229 && !('ontouchstart' in window)) { e.preventDefault(); $('composer').requestSubmit(); }
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); keepKb = true; $('composer').requestSubmit(); keepKb = false; }
 });
 $('msg').addEventListener('input', () => store.set('draft', $('msg').value));
 $('msg').value = store.get('draft') || '';
